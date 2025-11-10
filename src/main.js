@@ -23,7 +23,7 @@ const PROXY_BASE = 'https://eleven-worker.salesenablement.workers.dev';
 // !!! IMPORTANT !!!
 // Replace this placeholder with the actual URL you get after deploying your new worker/worker.js script
 //
-const ASSESS_BASE = 'https://your-new-assessment-worker.workers.dev/';
+const ASSESS_BASE = 'https://sales-skills-assessment-engine.salesenablement.workers.dev/';
 
 // [CHANGED] These are the *exact* skill names your rubric in KV uses.
 // The worker's /judge endpoint expects one skill at a time.
