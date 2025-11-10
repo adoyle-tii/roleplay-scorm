@@ -1,0 +1,17 @@
+{
+  "name": "elevenlabs-scorm-roleplay",
+  "version": "1.0.03",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@elevenlabs/client": "^0.3.0",
+    "@elevenlabs/elevenlabs-js": "^2.7.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.8",
+    "vite": "^5.4.0"
+  }
+}

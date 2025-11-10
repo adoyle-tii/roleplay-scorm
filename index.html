@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sales - Call Practice • Discovering Pain Points</title>
+
+<style>
+  /* ——— colours & base ——— */
+  :root{
+    --brand : #085ff7;
+    --bg    : #f7f9fc;
+    --text  : #1b1e21;
+    --card  : #fff;
+    --radius: 14px;
+  }
+  *{box-sizing:border-box;font-family:system-ui,sans-serif}
+  body{
+    margin:0;min-height:100vh;background:var(--bg);color:var(--text);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .card{
+    width:clamp(320px,90vw,640px);background:var(--card);
+    border-radius:var(--radius);padding:2rem;
+    box-shadow:0 8px 28px rgba(0,0,0,.08);
+  }
+
+  /* ——— scenario copy ——— */
+  h2{margin-top:0;font-size:1.4rem}
+  .scenario{font-size:.9rem;line-height:1.45;color:#444;margin-bottom:1.5rem}
+
+  /* ——— buttons ——— */
+  button{
+    display:inline-flex;align-items:center;gap:.5rem;
+    font-size:1rem;padding:.6rem 1.4rem;border-radius:var(--radius);
+    border:0;cursor:pointer;transition:.2s;user-select:none
+  }
+  #startBtn{background:var(--brand);color:#fff}
+  #startBtn:disabled{opacity:.4;cursor:default}
+  #closeBtn{background:#e2e6ef;color:#333}
+  #retryBtn{background:#e2e6ef;color:#333}
+
+  /* ——— status pill ——— */
+  #callStatus{
+    /* same padding & corner‑radius as buttons */
+    padding: .6rem 1.4rem;
+    border-radius: var(--radius);
+
+    /* colours */
+    background:#dfe5ff;color:#00249c;
+
+    /* layout */
+    display:inline-flex;align-items:center;gap:.5rem;justify-content:center;
+    font-weight:600;line-height:1;
+
+    /* keep a minimum width so the pill doesn’t collapse when empty */
+    min-width:140px;
+
+    visibility:hidden;              /* start fully invisible       */
+    transition:opacity .3s linear;
+  }
+  /* JS sets data-show="true" once there is text                */
+  #callStatus[data-show="true"]{visibility:visible}
+
+  /* pulse when .busy is toggled by JS                          */
+  #callStatus.busy{animation:pulse 1.2s infinite}
+  @keyframes pulse{50%{opacity:.4}}
+
+  /* hide close when embedded (JS gives .hide)                  */
+  .hide{display:none}
+</style>
+
+<!-- Vite swaps this path on build -->
+<script type="module" crossorigin src="/src/main.js"></script>
+</head>
+
+<body>
+  <div class="card">
+    <h2>Scenario - Discovering Pain Points</h2>
+    <p class="scenario">
+      You are calling an existing customer (John at The University of Manchester)
+      to uncover pain points around AI writing and to secure a follow-up meeting.
+      Your goal: ask open questions, listen actively, discover pains, and agree
+      a next step.<br>Minimum passing score: 70 / 100.
+    </p>
+
+    <button id="startBtn" onclick="startAgent()">🎤 Start Call</button>
+    <button id="retryBtn" class="hide">↻ Retry scoring</button>
+    <button id="closeBtn" class="hide">Close</button>
+
+    <!-- status pill -->
+    <div id="callStatus" data-show="false"></div>
+  </div>
+</body>
+</html>
