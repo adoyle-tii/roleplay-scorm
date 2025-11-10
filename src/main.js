@@ -1,6 +1,6 @@
 /******************************************************************
  * main.js – ElevenLabs voice-agent SCO (calls Sales Coach Worker)
- * Adds: retry scoring via SCORM suspend_data + a Retry button.
+ * [MODIFIED] Calls worker in a two-stage process: /judge then /coach
  ******************************************************************/
 
 import {
@@ -18,13 +18,18 @@ import { Conversation } from '@elevenlabs/client';
 // Eleven proxy that *you* run. We’ll poll it for transcript readiness.
 const PROXY_BASE = 'https://eleven-worker.salesenablement.workers.dev';
 
-// Your Sales Coach Worker (the scorer we just built)
-const ASSESS_BASE = 'https://gem-sales-coach-worker.salesenablement.workers.dev/';
+// [CHANGED] Your new Sales Coach Worker
+//
+// !!! IMPORTANT !!!
+// Replace this placeholder with the actual URL you get after deploying your new worker/worker.js script
+//
+const ASSESS_BASE = 'https://your-new-assessment-worker.workers.dev/';
 
-// Which rubric (from KV) and which skills (namespaced “Competency|Skill”)
-const RUBRIC_KEY = 'rubrics:v1';
+// [CHANGED] These are the *exact* skill names your rubric in KV uses.
+// The worker's /judge endpoint expects one skill at a time.
 const SKILLS = [
-  'Problem Discovery|Discovering Pain Points'
+  'Discovering Pain Points'
+  // Add more skill names here if the roleplay assesses multiple
 ];
 
 // Pass mark (0–100)
@@ -132,11 +137,7 @@ function showRetry(showIt) {
   }
 })();
 
-/* ───── poll your proxy for the **transcript** ─────
-   Expectation: your proxy exposes GET /api/convai/transcript/:convId
-   and returns JSON like:
-     { status: "pending" | "ready" | "done", transcript?: "Agent:...\nUser:..." }
-*/
+/* ───── poll your proxy for the **transcript** ───── */
 async function pollTranscript(convId) {
   console.log('[TRANSCRIPT] waiting on', convId);
   for (let i = 0; i < MAX_POLLS; i++) {
@@ -157,30 +158,59 @@ async function pollTranscript(convId) {
   return '';
 }
 
-/* ───── call the Sales Coach Worker for assessment ───── */
+/* ───── [CHANGED] call the Sales Coach Worker for assessment (2-stage) ───── */
 async function assessTranscript(transcript) {
-  const qs = new URLSearchParams({
-    rubric_key: RUBRIC_KEY,
-    skills: SKILLS.join(','),
-  });
-  const url = `${ASSESS_BASE}?${qs.toString()}`;
+  const assessments = [];
+  const sellerId = 'Learner'; // Generic ID for this context
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      transcript,
-      include_presentation: true
-      // (No need to pass rubrics; worker loads them from KV by rubric_key)
-    }),
-  });
+  for (const skill of SKILLS) {
+    // --- STAGE 1: Call /judge ---
+    show(`Assessing skill: ${skill}…`, true);
+    const judgeUrl = `${ASSESS_BASE.replace(/\/+$/, '')}/judge`;
+    const judgeRes = await fetch(judgeUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        transcript,
+        skill,
+        sellerId,
+      }),
+    });
 
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = data?.error || `Worker error ${res.status}`;
-    throw new Error(msg);
+    const judgeData = await judgeRes.json().catch(() => ({}));
+    if (!judgeRes.ok) {
+      const msg = judgeData?.error || `Worker error (judge) ${judgeRes.status}`;
+      throw new Error(msg);
+    }
+
+    const { skillKeyHash, skillName, rating, levelChecks } = judgeData;
+
+    // --- STAGE 2: Call /coach ---
+    show(`Generating coaching for ${skill}…`, true);
+    const coachUrl = `${ASSESS_BASE.replace(/\/+$/, '')}/coach`;
+    const coachRes = await fetch(coachUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        skillName,
+        rating,
+        levelChecks,
+        skillKeyHash,
+      }),
+    });
+
+    const coachData = await coachRes.json().catch(() => ({}));
+    if (!coachRes.ok) {
+      const msg = coachData?.error || `Worker error (coach) ${coachRes.status}`;
+      throw new Error(msg);
+    }
+    
+    // coachData is the final assessment object: { skill, rating, strengths, ... }
+    assessments.push(coachData);
   }
-  return data; // { assessments:[{skill,rating,strengths,improvements,coaching_tips,...}], meta, ... }
+
+  // Return the same structure as the old worker
+  return { assessments };
 }
 
 /* ───── compute a 0–100 score from per-skill 1–5 ratings ───── */
@@ -199,17 +229,23 @@ function formatDetailedFeedback(assessments, maxChars = 4000) {
   const blocks = [];
   for (const a of assessments || []) {
     const strengths = (a.strengths || []).slice(0, 2).map(s => `• ${s}`).join('\n') || '• —';
+    // [CHANGED] Use 'improvements' array which contains { point, example }
     const gapsArr = (a.improvements || []).slice(0, 2).map(i => {
-      const tail = i?.quote ? ` — "${i.quote}"` : '';
+      // The new worker format for improvements is: { point, example: { instead_of, try_this } }
+      const tail = i?.example?.instead_of ? ` — (e.g., instead of "${i.example.instead_of}", try "${i.example.try_this}")` : '';
       return `• ${i?.point || '—'}${tail}`;
     });
     const gaps = gapsArr.length ? gapsArr.join('\n') : '• —';
     const tips = (a.coaching_tips || []).slice(0, 3).map(t => `• ${t}`).join('\n') || '• —';
+    
+    // Use improvement_title from the worker response if it exists, otherwise default
+    const improvementTitle = a.improvement_title || 'Areas for Improvement';
+
     blocks.push(
 `[${a.skill}] Score: ${a.rating}/5
 Strengths:
 ${strengths}
-Weaknesses:
+${improvementTitle}:
 ${gaps}
 Coaching Tips:
 ${tips}`
@@ -285,7 +321,7 @@ async function retryScoring() {
     const transcript = await pollTranscript(convId);
     if (!transcript) throw new Error('Transcript still unavailable.');
 
-    // 2) call assessor
+    // 2) call assessor [CHANGED to 2-stage]
     const result = await assessTranscript(transcript);
 
     // 3) compute + commit
@@ -326,7 +362,7 @@ export async function startAgent() {
         const transcript = await pollTranscript(convo.getId());
         if (!transcript) throw new Error('No transcript available');
 
-        // 2) send to Sales Coach Worker
+        // 2) send to Sales Coach Worker [CHANGED to 2-stage]
         const result = await assessTranscript(transcript);
 
         // 3) compute score + build text
@@ -348,8 +384,7 @@ export async function startAgent() {
         writeSuspend({
           pending:   true,
           convId:    convo.getId(),
-          rubricKey: RUBRIC_KEY,
-          skills:    SKILLS,
+          // [REMOVED] No longer need to store rubric key/skills in suspend
           ts:        Date.now()
         });
         showRetry(true);
@@ -368,8 +403,7 @@ export async function startAgent() {
   writeSuspend({
     pending:   true,
     convId:    convo.getId(),
-    rubricKey: RUBRIC_KEY,
-    skills:    SKILLS,
+    // [REMOVED] No longer need to store rubric key/skills in suspend
     ts:        Date.now()
   });
 
