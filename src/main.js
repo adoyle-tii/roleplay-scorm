@@ -351,7 +351,7 @@ export async function startAgent() {
   startBtn.disabled = true;
 
   const convo = await Conversation.startSession({
-    agentId:      'agent_01k06t3bfjfec9ay9xbm6mxceh', // unchanged
+    agentId:      'agent_0301k9fmcmg1eqksgfjb7qnva34h', // elevenlabs agentID
     onConnect:    () => show('Listening…'),
     onModeChange: ({ mode }) => show(mode === 'speaking' ? 'Agent speaking…' : 'Listening…'),
     onDisconnect: async () => {
